@@ -1,119 +1,80 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { 
-  User as FirebaseUser,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged
-} from "firebase/auth";
-import { auth } from "@/services/firebase";
-import type { User } from "@shared/schema";
+import { signup as apiSignup, login as apiLogin } from "@/services/api";
 
-interface AuthContextType {
-  currentUser: FirebaseUser | null;
-  userData: User | null;
-  loading: boolean;
-  signup: (email: string, password: string, username: string) => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
-  }
-  return context;
-}
+const AuthContext = createContext<any>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [userData, setUserData] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Restore session automatically
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      
-      if (user) {
-        try {
-          const response = await fetch(`/api/users/${user.uid}`);
-          if (response.ok) {
-            const data = await response.json();
-            setUserData(data);
-          } else {
-            console.error("Failed to fetch user data:", await response.text());
-            setUserData(null);
-          }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
-          setUserData(null);
-        }
-      } else {
-        setUserData(null);
-      }
-      
-      setLoading(false);
-    });
+    const uid = localStorage.getItem("uid");
+    const username = localStorage.getItem("username") || "User";
 
-    return unsubscribe;
+    if (uid) {
+      setCurrentUser({ uid, email: "unknown" });
+      setUserData({
+        username,
+        xp: 250,
+        level: 3
+      });
+    }
+
+    setLoading(false);
   }, []);
 
-  const signup = async (email: string, password: string, username: string) => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Create user in backend
-      const response = await fetch("/api/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          username,
-          firebaseUid: userCredential.user.uid,
-          skills: [],
-          interests: [],
-          xp: 0,
-          level: 1,
-        }),
-      });
+  const signup = async (email: string, password: string) => {
+    const res = await apiSignup(email, password);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create user profile");
-      }
+    const uid = res.data.uid;
 
-      const data = await response.json();
-      setUserData(data);
-    } catch (error: any) {
-      // If user was created in Firebase but backend failed, clean up
-      if (auth.currentUser) {
-        await auth.currentUser.delete();
-      }
-      throw error;
-    }
+    setCurrentUser({ uid, email });
+    localStorage.setItem("uid", uid);
+
+    // TEMP MOCK DATA (replace later with backend data)
+    const username = email.split("@")[0];
+    localStorage.setItem("username", username);
+
+    setUserData({
+      username,
+      xp: 0,
+      level: 1
+    });
   };
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-    // User data will be fetched in onAuthStateChanged
+    const res = await apiLogin(email, password);
+
+    const uid = res.data.uid;
+
+    setCurrentUser({ uid, email });
+    localStorage.setItem("uid", uid);
+
+    // TEMP MOCK DATA
+    const username = email.split("@")[0];
+    localStorage.setItem("username", username);
+
+    setUserData({
+      username,
+      xp: 250,
+      level: 3
+    });
   };
 
-  const logout = async () => {
-    await firebaseSignOut(auth);
+  const logout = () => {
+    setCurrentUser(null);
     setUserData(null);
+    localStorage.removeItem("uid");
+    localStorage.removeItem("username");
   };
 
-  const value = {
-    currentUser,
-    userData,
-    loading,
-    signup,
-    login,
-    logout,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ currentUser, userData, loading, signup, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
+
+export const useAuth = () => useContext(AuthContext);

@@ -1,76 +1,48 @@
 import axios from "axios";
-import type { 
-  InsertProject, 
-  Project, 
-  InsertTask, 
-  Task,
-  InsertReview,
-  Review,
-  ProjectProgress,
-  TeammateMatch 
-} from "@shared/schema";
 
-const api = axios.create({
-  baseURL: "/api",
+const API = axios.create({
+  baseURL: "http://127.0.0.1:5000",
 });
 
-// Projects
-export const createProject = async (project: InsertProject): Promise<Project> => {
-  const { data } = await api.post("/projects", project);
-  return data;
-};
+// ======================
+// AUTH
+// ======================
+export function signup(email: string, password: string) {
+  return API.post("/signup", { email, password });
+}
 
-export const getProjects = async (): Promise<Project[]> => {
-  const { data } = await api.get("/projects");
-  return data;
-};
+export function login(email: string, password: string) {
+  return API.post("/login", { email, password });
+}
 
-export const getProject = async (id: string): Promise<Project> => {
-  const { data } = await api.get(`/projects/${id}`);
-  return data;
-};
+// ======================
+// PROJECTS
+// ======================
+export function createProject(data: { name: string; created_by: string }) {
+  return API.post("/projects", data);
+}
 
-// Tasks
-export const createTask = async (projectId: string, task: InsertTask): Promise<Task> => {
-  const { data } = await api.post(`/projects/${projectId}/tasks`, task);
-  return data;
-};
+// GET ALL PROJECTS FOR THE USER
+export function getProjectsForUser(uid: string) {
+  return API.get(`/user/${uid}/projects`);
+}
 
-export const getTasks = async (projectId: string): Promise<Task[]> => {
-  const { data } = await api.get(`/projects/${projectId}/tasks`);
-  return data;
-};
+// ======================
+// TASKS
+// ======================
+export function getTasks(projectId: string) {
+  return API.get(`/projects/${projectId}/tasks`);
+}
 
-export const updateTask = async (projectId: string, taskId: string, updates: Partial<Task>): Promise<Task> => {
-  const { data } = await api.patch(`/projects/${projectId}/tasks/${taskId}`, updates);
-  return data;
-};
+export function createTask(projectId: string, data: any) {
+  return API.post(`/projects/${projectId}/tasks`, data);
+}
 
-export const deleteTask = async (projectId: string, taskId: string): Promise<void> => {
-  await api.delete(`/projects/${projectId}/tasks/${taskId}`);
-};
+export function updateTask(projectId: string, taskId: string, data: any) {
+  return API.put(`/projects/${projectId}/tasks/${taskId}`, data);
+}
 
-// Progress
-export const getProjectProgress = async (projectId: string): Promise<ProjectProgress> => {
-  const { data } = await api.get(`/projects/${projectId}/progress`);
-  return data;
-};
+export function deleteTask(projectId: string, taskId: string) {
+  return API.delete(`/projects/${projectId}/tasks/${taskId}`);
+}
 
-// Reviews
-export const createReview = async (review: InsertReview): Promise<Review> => {
-  const { data } = await api.post("/reviews", review);
-  return data;
-};
-
-export const getProjectReviews = async (projectId: string): Promise<Review[]> => {
-  const { data } = await api.get(`/projects/${projectId}/reviews`);
-  return data;
-};
-
-// Skill Matching
-export const findTeammates = async (skills: string[], interests: string[], projectIdea: string): Promise<TeammateMatch[]> => {
-  const { data } = await api.post("/match-teammates", { skills, interests, projectIdea });
-  return data;
-};
-
-export default api;

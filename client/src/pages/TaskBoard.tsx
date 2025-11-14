@@ -1,64 +1,76 @@
-import { useState } from "react";
-import { useAuth } from "@/context/AuthContext";
-import { useLocation, useParams } from "wouter";
+import { useState, useEffect } from "react";
+import { useParams, useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TaskCard } from "@/components/TaskCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { useToast } from "@/hooks/use-toast";
-import { useTasks, useCreateTask, useUpdateTask, useDeleteTask } from "@/hooks/useTasks";
+import axios from "axios";
 import { Plus, ArrowLeft } from "lucide-react";
-import type { TaskStatus } from "@shared/schema";
 
 export default function TaskBoard() {
   const params = useParams();
-  const projectId = params.id;
-  const { currentUser, userData } = useAuth();
+  const projectId = params?.id;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { data: tasks = [], isLoading } = useTasks(projectId);
-  const createTaskMutation = useCreateTask(projectId || "");
-  const updateTaskMutation = useUpdateTask(projectId || "");
-  const deleteTaskMutation = useDeleteTask(projectId || "");
+
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    priority: "medium",
-    xpReward: 10,
   });
 
+  // -------------------------------------
+  // LOAD TASKS
+  // -------------------------------------
+  const loadTasks = async () => {
+    try {
+      const res = await axios.get(`http://127.0.0.1:5000/projects/${projectId}/tasks`);
+      setTasks(res.data.tasks || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to load tasks",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks();
+  }, [projectId]);
+
+  // -------------------------------------
+  // CREATE TASK
+  // -------------------------------------
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!projectId) return;
 
     try {
-      await createTaskMutation.mutateAsync({
-        projectId,
+      await axios.post(`http://127.0.0.1:5000/projects/${projectId}/tasks`, {
         title: formData.title,
-        description: formData.description || null,
-        status: "not_started",
-        assignedTo: null,
-        priority: formData.priority,
-        xpReward: formData.xpReward,
-        dueDate: null,
+        description: formData.description,
+        status: "Not Started",
+      });
+
+      toast({
+        title: "Task Added",
+        description: "Your task was created successfully!",
       });
 
       setDialogOpen(false);
-      setFormData({ title: "", description: "", priority: "medium", xpReward: 10 });
-      
-      toast({
-        title: "Success!",
-        description: "Task created successfully",
-      });
-    } catch (error) {
+      setFormData({ title: "", description: "" });
+      loadTasks();
+    } catch {
       toast({
         title: "Error",
         description: "Failed to create task",
@@ -67,14 +79,20 @@ export default function TaskBoard() {
     }
   };
 
+  // -------------------------------------
+  // DELETE TASK
+  // -------------------------------------
   const handleDeleteTask = async (taskId: string) => {
     try {
-      await deleteTaskMutation.mutateAsync(taskId);
+      await axios.delete(`http://127.0.0.1:5000/projects/${projectId}/tasks/${taskId}`);
+
       toast({
-        title: "Task deleted",
-        description: "Task has been removed",
+        title: "Task Deleted",
+        description: "Task removed successfully!",
       });
-    } catch (error) {
+
+      loadTasks();
+    } catch {
       toast({
         title: "Error",
         description: "Failed to delete task",
@@ -83,13 +101,17 @@ export default function TaskBoard() {
     }
   };
 
-  const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+  // -------------------------------------
+  // UPDATE TASK STATUS
+  // -------------------------------------
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
-      await updateTaskMutation.mutateAsync({
-        taskId,
-        updates: { status: newStatus },
+      await axios.put(`http://127.0.0.1:5000/projects/${projectId}/tasks/${taskId}`, {
+        status: newStatus,
       });
-    } catch (error) {
+
+      loadTasks();
+    } catch {
       toast({
         title: "Error",
         description: "Failed to update task status",
@@ -98,17 +120,22 @@ export default function TaskBoard() {
     }
   };
 
+  // -------------------------------------
+  // KANBAN COLUMNS
+  // -------------------------------------
   const columns = [
-    { id: "not_started", title: "Not Started", color: "border-muted" },
-    { id: "in_progress", title: "In Progress", color: "border-chart-4" },
-    { id: "completed", title: "Completed", color: "border-chart-2" },
+    { id: "Not Started", title: "Not Started", color: "border-muted" },
+    { id: "In Progress", title: "In Progress", color: "border-blue-400" },
+    { id: "Done", title: "Completed", color: "border-green-500" },
   ];
 
-  const getTasksByStatus = (status: string) => {
-    return tasks.filter(task => task.status === status);
-  };
+  const getTasksByStatus = (status: string) =>
+    tasks.filter((task) => task.status === status);
 
-  if (isLoading) {
+  // -------------------------------------
+  // LOADING SKELETONS
+  // -------------------------------------
+  if (loading) {
     return (
       <div className="min-h-screen pt-24 px-4 pb-12">
         <div className="max-w-7xl mx-auto">
@@ -123,140 +150,117 @@ export default function TaskBoard() {
     );
   }
 
+  // -------------------------------------
+  // UI RENDER
+  // -------------------------------------
   return (
     <ProtectedRoute>
-    <div className="min-h-screen pt-24 px-4 pb-12">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Button 
-            variant="ghost" 
+      <div className="min-h-screen pt-24 px-4 pb-12">
+        <div className="max-w-7xl mx-auto">
+          {/* Back Button */}
+          <Button
+            variant="ghost"
             className="mb-4"
             onClick={() => setLocation("/projects")}
-            data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Projects
           </Button>
-          
-          <div className="flex items-center justify-between">
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
             <div>
-              <h1 className="text-4xl font-bold tracking-tight mb-2">Task Board</h1>
+              <h1 className="text-4xl font-bold tracking-tight">Task Board</h1>
               <p className="text-muted-foreground text-lg">
-                Organize and track your project tasks
+                Organize and track your tasks
               </p>
             </div>
-            
+
+            {/* Create Task Dialog */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button data-testid="button-create-task">
+                <Button>
                   <Plus className="w-4 h-4 mr-2" />
                   New Task
                 </Button>
               </DialogTrigger>
+
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Create New Task</DialogTitle>
                 </DialogHeader>
+
                 <form onSubmit={handleCreateTask} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="title">Task Title</Label>
                     <Input
                       id="title"
-                      placeholder="Implement feature X"
+                      placeholder="Example: Build Homepage"
                       value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, title: e.target.value })
+                      }
                       required
-                      data-testid="input-task-title"
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="description">Description</Label>
                     <Textarea
                       id="description"
                       placeholder="Describe the task..."
                       value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      data-testid="input-task-description"
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="priority">Priority</Label>
-                      <Select
-                        value={formData.priority}
-                        onValueChange={(value) => setFormData({ ...formData, priority: value })}
-                      >
-                        <SelectTrigger data-testid="select-priority">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="xp">XP Reward</Label>
-                      <Input
-                        id="xp"
-                        type="number"
-                        value={formData.xpReward}
-                        onChange={(e) => setFormData({ ...formData, xpReward: parseInt(e.target.value) })}
-                        min={1}
-                        data-testid="input-xp-reward"
-                      />
-                    </div>
-                  </div>
-
-                  <Button type="submit" className="w-full" data-testid="button-submit-task">
+                  <Button type="submit" className="w-full">
                     Create Task
                   </Button>
                 </form>
               </DialogContent>
             </Dialog>
           </div>
-        </div>
 
-        {/* Kanban Board */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {columns.map((column) => (
-            <div key={column.id} className="space-y-4">
-              <div className={`border-l-4 ${column.color} pl-4`}>
-                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-1">
-                  {column.title}
-                </h3>
-                <p className="text-2xl font-bold" data-testid={`count-${column.id}`}>
-                  {getTasksByStatus(column.id).length}
-                </p>
-              </div>
+          {/* Kanban Columns */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {columns.map((column) => (
+              <div key={column.id} className="space-y-4">
+                <div className={`border-l-4 ${column.color} pl-4`}>
+                  <h3 className="font-semibold uppercase text-sm text-muted-foreground">
+                    {column.title}
+                  </h3>
+                  <p className="text-2xl font-bold">
+                    {getTasksByStatus(column.id).length}
+                  </p>
+                </div>
 
-              <div className="space-y-3">
-                {getTasksByStatus(column.id).length === 0 ? (
-                  <Card className="p-8 border-dashed text-center">
-                    <p className="text-sm text-muted-foreground">No tasks</p>
-                  </Card>
-                ) : (
-                  getTasksByStatus(column.id).map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onDelete={handleDeleteTask}
-                      onStatusChange={handleStatusChange}
-                    />
-                  ))
-                )}
+                <div className="space-y-3">
+                  {getTasksByStatus(column.id).length === 0 ? (
+                    <Card className="p-8 text-center border-dashed">
+                      <p className="text-sm text-muted-foreground">No tasks</p>
+                    </Card>
+                  ) : (
+                    getTasksByStatus(column.id).map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onDelete={handleDeleteTask}
+                        onStatusChange={handleStatusChange}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
-    </div>
     </ProtectedRoute>
   );
 }

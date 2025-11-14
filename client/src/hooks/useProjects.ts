@@ -1,28 +1,9 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient } from "@/lib/queryClient";
-import { createProject, getProjects, getProject } from "@/services/api";
-import type { InsertProject } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { getProjectsForUser } from "@/services/api";
 
-export function useProjects() {
+export function useProjects(uid: string) {
   return useQuery({
-    queryKey: ["/api/projects"],
-    queryFn: getProjects,
-  });
-}
-
-export function useProject(id: string | undefined) {
-  return useQuery({
-    queryKey: ["/api/projects", id],
-    queryFn: () => id ? getProject(id) : null,
-    enabled: !!id,
-  });
-}
-
-export function useCreateProject() {
-  return useMutation({
-    mutationFn: (project: InsertProject) => createProject(project),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-    },
+    queryKey: ["projects", uid],
+    queryFn: () => getProjectsForUser(uid).then((res) => res.data.projects),
   });
 }
